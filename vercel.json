@@ -1,1 +1,1 @@
-{"functions":{"api/review.js":{"runtime":"nodejs20.x"}}}
+{"functions":{"api/review.js":{"runtime":"nodejs24.x"}}}
