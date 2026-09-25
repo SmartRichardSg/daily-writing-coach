@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Daily Writing Coach</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f7fb;color:#1f2937;margin:0}
+main{max-width:760px;margin:auto;padding:22px 16px 50px}
+.card{background:#fff;border-radius:20px;padding:20px;margin:14px 0;box-shadow:0 4px 18px rgba(0,0,0,.06)}
+h1{margin:0 0 5px}.sub{color:#667085;margin-top:0}
+.topic{font-size:21px;font-weight:650;line-height:1.4}
+textarea{width:100%;min-height:270px;box-sizing:border-box;border:1px solid #ccd2da;border-radius:14px;padding:14px;font:17px/1.6 inherit}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px}
+button{border:0;border-radius:12px;padding:12px 16px;font-weight:700;font-size:16px;background:#111827;color:#fff}
+button.secondary{background:#e9edf2;color:#1f2937}
+button:disabled{opacity:.5}.ok{color:#16734a}.warn{color:#a15c00}
+.score{font-size:44px;font-weight:800}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.metric{background:#f5f6f8;border-radius:12px;padding:12px}.metric b{display:block;font-size:22px}
+.mistake{border-left:4px solid #111827;background:#fafafa;padding:10px;margin:9px 0}
+.small{font-size:14px;color:#667085}.hidden{display:none}
+@media(max-width:520px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+<section class="card">
+<h1>Daily Writing Coach</h1>
+<p class="sub">Small steps. Better writing every day.</p>
+<div class="small">TODAY'S TOPIC</div>
+<p id="topic" class="topic"></p>
+<p class="small">Write 100–200 words, to the best of your ability.</p>
+</section>
+
+<section class="card">
+<textarea id="writing" placeholder="Start writing here..."></textarea>
+<div class="row"><b id="count">0 words</b><span id="status" class="small">Aim for 100–200</span></div>
+<div class="row">
+<button id="review">Review My Writing</button>
+<button id="clear" class="secondary">Clear</button>
+</div>
+</section>
+
+<section id="result" class="card hidden"></section>
+
+<section class="card">
+<h2>My Progress</h2>
+<div id="progress">No attempts yet.</div>
+</section>
+</main>
+
+<script>
+const topics=[
+"Is it better to spend money on experiences or possessions?",
+"What is one small habit that has improved your life?",
+"Describe a place you would happily visit again and why.",
+"What does a good day look like to you?",
+"Is technology making everyday life better or more complicated?",
+"What is something you learned later in life that you wish you had learned earlier?",
+"Describe a person who taught you something important."
+];
+const topic=topics[new Date().getDate()%topics.length];
+document.getElementById("topic").textContent=topic;
+const ta=document.getElementById("writing"),count=document.getElementById("count"),status=document.getElementById("status");
+const key="daily-writing-coach-history";
+function words(s){return s.trim()?s.trim().split(/\s+/).length:0}
+function update(){
+ let n=words(ta.value); count.textContent=n+" word"+(n===1?"":"s");
+ status.textContent=n<100?"Add more detail to reach 100 words":n<=200?"Target reached — ready to review":"Over 200 words — consider trimming";
+ status.className="small "+(n>=100&&n<=200?"ok":"warn");
+}
+ta.addEventListener("input",update);update();
+function history(){return JSON.parse(localStorage.getItem(key)||"[]")}
+function render(){
+ let h=history(),p=document.getElementById("progress");
+ if(!h.length){p.textContent="No attempts yet.";return}
+ let avg=Math.round(h.reduce((a,x)=>a+x.score,0)/h.length);
+ p.innerHTML="<p><b>"+h.length+"</b> attempts · <b>"+avg+"/100</b> average</p>"+
+ h.slice(0,20).map(x=>"<div class='metric' style='margin:8px 0'><b>"+x.score+"/100</b><span>"+x.date+" · "+x.words+" words</span></div>").join("");
+}
+render();
+document.getElementById("clear").onclick=()=>{ta.value="";update();ta.focus()};
+document.getElementById("review").onclick=async()=>{
+ let writing=ta.value.trim(),n=words(writing);
+ if(n<100){alert("Please reach at least 100 words first.");return}
+ let btn=document.getElementById("review"),out=document.getElementById("result");
+ btn.disabled=true;btn.textContent="Reviewing…";out.classList.remove("hidden");
+ out.innerHTML="<h2>Reviewing…</h2><p>Your writing is being checked.</p>";
+ try{
+  let r=await fetch("/api/review",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,writing})});
+  let d=await r.json();if(!r.ok)throw Error(d.error||"Review failed");
+  out.innerHTML="<h2>Your Score</h2><div class='score'>"+d.score+"/100</div>"+
+  "<div class='grid'>"+Object.entries(d.categories||{}).map(([k,v])=>"<div class='metric'><b>"+v+"</b>"+k+"</div>").join("")+"</div>"+
+  "<h3>Corrected version</h3><p>"+safe(d.corrected).replace(/\n/g,"<br>")+"</p>"+
+  "<h3>Important mistakes</h3>"+(d.mistakes||[]).map(m=>"<div class='mistake'><b>"+safe(m.original)+"</b><br>"+safe(m.correction)+"<br><span class='small'>"+safe(m.why)+"</span></div>").join("")+
+  "<h3>Tomorrow</h3><p>"+safe(d.nextTarget)+"</p>";
+  let h=history();h.unshift({date:new Date().toLocaleDateString(),words:n,score:d.score});localStorage.setItem(key,JSON.stringify(h.slice(0,100)));render();
+ }catch(e){out.innerHTML="<h2>AI review is not connected yet</h2><p>"+safe(e.message)+"</p><p class='small'>The writing area, live counter and progress history are ready. AI requires the server-side API key.</p>"}
+ btn.disabled=false;btn.textContent="Review My Writing";
+};
+function safe(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
+</script>
+</body>
+</html>
