@@ -6,52 +6,68 @@
 <title>Daily Writing Coach</title>
 <style>
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f7fb;color:#1f2937;margin:0}
-main{max-width:760px;margin:auto;padding:22px 16px 50px}
+main{max-width:760px;margin:auto;padding:16px 16px 50px}
 .card{background:#fff;border-radius:20px;padding:20px;margin:14px 0;box-shadow:0 4px 18px rgba(0,0,0,.06)}
 h1{margin:0 0 5px}.sub{color:#667085;margin-top:0}.topic{font-size:21px;font-weight:650;line-height:1.4}
 textarea{width:100%;min-height:270px;box-sizing:border-box;border:1px solid #ccd2da;border-radius:14px;padding:14px;font:17px/1.6 inherit}
 .reviewbox{min-height:180px}.row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
 button{border:0;border-radius:12px;padding:12px 16px;font-weight:700;font-size:16px;background:#111827;color:#fff}
-button.secondary{background:#e9edf2;color:#1f2937}.ok{color:#16734a}.warn{color:#a15c00}
-.small{font-size:14px;color:#667085}.metric{background:#f5f6f8;border-radius:12px;padding:12px}.metric b{display:block;font-size:18px}
-.saved{background:#eef8f1;border-radius:12px;padding:12px;margin-top:12px}
-@media(max-width:520px){button{width:100%}}
+button.secondary{background:#e9edf2;color:#1f2937}
+button.tab{background:#e9edf2;color:#1f2937;border-radius:12px;flex:1}
+button.tab.active{background:#111827;color:#fff}
+.ok{color:#16734a}.warn{color:#a15c00}.small{font-size:14px;color:#667085}
+.metric{background:#f5f6f8;border-radius:12px;padding:12px;margin:8px 0}
+.metric b{display:block;font-size:18px}.saved{background:#eef8f1;border-radius:12px;padding:12px;margin-top:12px}
+.savedPage{white-space:pre-wrap;line-height:1.6;background:#f8f9fb;border-radius:14px;padding:16px;margin-top:12px}
+.hidden{display:none}.tabbar{display:flex;gap:8px;margin:4px 0 14px}
+@media(max-width:520px){button{width:100%}.tabbar button{width:auto}.row button{width:100%}}
 </style>
 </head>
 <body>
 <main>
+<div class="tabbar">
+<button id="writeTab" class="tab active">Write Today</button>
+<button id="savedTab" class="tab">Saved Pages</button>
+</div>
+
+<div id="writeView">
 <section class="card">
 <h1>Daily Writing Coach</h1>
 <p class="sub">Small steps. Better writing every day.</p>
 <div class="small">TODAY'S TOPIC</div>
 <p id="topic" class="topic"></p>
-<p class="small">Write 100â200 words, to the best of your ability.</p>
+<p class="small">Write 100-200 words, to the best of your ability.</p>
 </section>
 
 <section class="card">
 <textarea id="writing" placeholder="Start writing here..."></textarea>
-<div class="row"><b id="count">0 words</b><span id="status" class="small">Aim for 100â200</span></div>
+<div class="row"><b id="count">0 words</b><span id="status" class="small">Aim for 100-200</span></div>
 <div class="row">
 <button id="copy">Copy for ChatGPT</button>
 <button id="clear" class="secondary">Clear</button>
 </div>
-<p class="small">Copy your writing, paste it into ChatGPT for review, then paste the review into the box below.</p>
+<p class="small">Copy your writing, paste it into ChatGPT for review, then paste the corrected version into the box below.</p>
 </section>
 
 <section class="card">
-<h2>Paste ChatGPT Review</h2>
-<textarea id="reviewText" class="reviewbox" placeholder="Paste your ChatGPT review here..."></textarea>
+<h2>Paste Corrected Version</h2>
+<textarea id="reviewText" class="reviewbox" placeholder="Paste the corrected version from ChatGPT here..."></textarea>
 <div class="row">
 <button id="save">Save Today's Review</button>
 <button id="clearReview" class="secondary">Clear Review</button>
 </div>
 <div id="savedMessage"></div>
 </section>
+</div>
 
+<div id="savedView" class="hidden">
 <section class="card">
-<h2>My Progress</h2>
-<div id="progress">No attempts yet.</div>
+<h2>Saved Pages</h2>
+<p class="small">Tap any page to open your saved writing and corrected version.</p>
+<div id="savedList">No saved pages yet.</div>
+<div id="savedPage"></div>
 </section>
+</div>
 </main>
 
 <script>
@@ -75,26 +91,67 @@ function words(s){return s.trim()?s.trim().split(/\s+/).length:0}
 function update(){
  let n=words(ta.value);
  count.textContent=n+" word"+(n===1?"":"s");
- status.textContent=n<100?"Add more detail to reach 100 words":n<=200?"Target reached â ready for ChatGPT":"Over 200 words â consider trimming";
+ status.textContent=n<100?"Add more detail to reach 100 words":n<=200?"Target reached - ready for ChatGPT":"Over 200 words - consider trimming";
  status.className="small "+(n>=100&&n<=200?"ok":"warn");
 }
 ta.addEventListener("input",update); update();
 
 function history(){return JSON.parse(localStorage.getItem(key)||"[]")}
-function render(){
- let h=history(),p=document.getElementById("progress");
- if(!h.length){p.textContent="No attempts yet.";return}
- p.innerHTML=h.slice(0,20).map((x,i)=>
- "<div class='metric' style='margin:8px 0'><b>"+(i+1)+". "+x.date+"</b><br><span>"+x.words+" words Â· Review saved</span></div>"
- ).join("");
+
+function esc(s){
+ return String(s).replace(/[&<>"']/g,function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+ });
 }
-render();
+
+function renderSaved(){
+ let h=history(),list=document.getElementById("savedList"),page=document.getElementById("savedPage");
+ page.innerHTML="";
+ if(!h.length){list.innerHTML="No saved pages yet.";return}
+ list.innerHTML=h.map((x,i)=>
+  "<div class='metric'><b>"+esc(x.date)+"</b><span>"+esc(x.words)+" words - "+esc(x.topic)+"</span><div style='margin-top:10px'><button class='openPage' data-index='"+i+"'>Open Page</button></div></div>"
+ ).join("");
+ document.querySelectorAll(".openPage").forEach(btn=>{
+  btn.onclick=()=>openSaved(Number(btn.dataset.index));
+ });
+}
+
+function openSaved(i){
+ let x=history()[i];
+ if(!x)return;
+ document.getElementById("savedPage").innerHTML=
+  "<div class='card' style='margin:14px 0 0;padding:16px;background:#f8f9fb'>"+
+  "<h3>"+esc(x.date)+"</h3>"+
+  "<p class='small'><b>Topic:</b> "+esc(x.topic)+"</p>"+
+  "<h3>My Original Writing</h3>"+
+  "<div class='savedPage'>"+esc(x.writing)+"</div>"+
+  "<h3>Corrected Version</h3>"+
+  "<div class='savedPage'>"+esc(x.review)+"</div>"+
+  "<div style='margin-top:12px'><button id='backToSaved' class='secondary'>Back to Saved Pages</button></div>"+
+  "</div>";
+ document.getElementById("backToSaved").onclick=()=>{document.getElementById("savedPage").innerHTML="";};
+}
+
+document.getElementById("writeTab").onclick=()=>{
+ document.getElementById("writeView").classList.remove("hidden");
+ document.getElementById("savedView").classList.add("hidden");
+ document.getElementById("writeTab").classList.add("active");
+ document.getElementById("savedTab").classList.remove("active");
+};
+
+document.getElementById("savedTab").onclick=()=>{
+ document.getElementById("writeView").classList.add("hidden");
+ document.getElementById("savedView").classList.remove("hidden");
+ document.getElementById("savedTab").classList.add("active");
+ document.getElementById("writeTab").classList.remove("active");
+ renderSaved();
+};
 
 document.getElementById("copy").onclick=async()=>{
  let writing=ta.value.trim(),n=words(writing);
  if(n<100){alert("Please write at least 100 words first.");return}
  let text="Daily Writing Coach\n\nTopic: "+topic+"\n\nMy writing:\n"+writing+
- "\n\nPlease review this as my writing coach. Correct it while preserving my meaning and voice. Identify important mistakes and explain why. Give scores from 1â100 for Grammar, Vocabulary, Clarity, Sentence Structure and Overall Expression, an overall score, and one specific improvement for tomorrow.";
+ "\n\nPlease review this as my writing coach. Correct it while preserving my meaning and voice. Identify important mistakes and explain why. Give scores from 1-100 for Grammar, Vocabulary, Clarity, Sentence Structure and Overall Expression, an overall score, and one specific improvement for tomorrow.";
  try{await navigator.clipboard.writeText(text);alert("Copied. Now paste it into ChatGPT.");}
  catch(e){alert("Copy failed. Please select and copy the writing manually.");}
 };
@@ -105,12 +162,11 @@ document.getElementById("clearReview").onclick=()=>{reviewText.value="";reviewTe
 document.getElementById("save").onclick=()=>{
  let writing=ta.value.trim(),review=reviewText.value.trim(),n=words(writing);
  if(n<100){alert("Please write at least 100 words first.");return}
- if(!review){alert("Please paste your ChatGPT review first.");return}
+ if(!review){alert("Please paste the corrected version first.");return}
  let h=history();
  h.unshift({date:new Date().toLocaleDateString(),words:n,topic:topic,writing:writing,review:review});
  localStorage.setItem(key,JSON.stringify(h.slice(0,100)));
- document.getElementById("savedMessage").innerHTML="<div class='saved'><b>Saved.</b> Your writing and review are stored on this device.</div>";
- render();
+ document.getElementById("savedMessage").innerHTML="<div class='saved'><b>Saved.</b> Your writing and corrected version are stored on this device.</div>";
 };
 </script>
 </body>
