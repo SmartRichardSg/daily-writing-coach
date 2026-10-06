@@ -40,7 +40,7 @@ button.tab.active{background:#111827;color:#fff}
 </section>
 
 <section class="card">
-<textarea id="writing" placeholder="Start writing here..."></textarea>
+<textarea id="writing" autocomplete="off" placeholder="Start writing here..."></textarea>
 <div class="row"><b id="count">0 words</b><span id="status" class="small">Aim for 100-200</span></div>
 <div class="row">
 <button id="copy">Copy for ChatGPT</button>
@@ -84,6 +84,16 @@ const topic=topics[new Date().getDate()%topics.length];
 document.getElementById("topic").textContent=topic;
 
 const ta=document.getElementById("writing"), reviewText=document.getElementById("reviewText");
+
+// Start each fresh page visit with a blank writing box. This prevents Safari
+// from restoring the previous unsaved text, while preserving text when the
+// user returns to the page from the Saved Pages tab via the back/forward cache.
+window.addEventListener("pageshow", (event) => {
+  if (!event.persisted) {
+    ta.value = "";
+    update();
+  }
+});
 const count=document.getElementById("count"), status=document.getElementById("status");
 const key="daily-writing-coach-history";
 
